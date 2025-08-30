@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Socket.IO Test Client</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    input, button, select { margin: 4px; padding: 4px; }
+    #log { background: #f7f7f7; border: 1px solid #ccc; padding: 10px; height: 350px; overflow-y: scroll; font-size: 15px; }
+    .section { margin-bottom: 20px; }
+    .log-sent { background: #e6f7ff; color: #005580; border-left: 4px solid #1890ff; margin: 8px 0; padding: 6px; }
+    .log-recv { background: #f6ffed; color: #135200; border-left: 4px solid #52c41a; margin: 8px 0; padding: 6px; }
+    .log-error { background: #fff1f0; color: #a8071a; border-left: 4px solid #ff4d4f; margin: 8px 0; padding: 6px; }
+    .log-explain { font-size: 13px; color: #888; margin-left: 10px; }
+    .log-time { font-size: 12px; color: #aaa; float: right; }
+    .log-clear-btn { float: right; margin-top: -25px; }
+  </style>
+</head>
+<body>
+  <h2>Socket.IO Chat App Test</h2>
+  <div class="section">
+    <label><b>Backend URL:</b></label>
+    <input type="text" id="backendUrl" value="http://localhost:3003" size="30" placeholder="e.g. http://localhost:3003">
+    <button onclick="connectSocket()">Connect</button>
+    <span id="connStatus"></span>
+    <div class="log-explain">Enter your backend/server address here. If you are running locally, you can use the default.</div>
+  </div>
+
+  <div class="section">
+    <label><b>User ID:</b></label>
+    <input type="number" id="userId" min="1" placeholder="e.g. 1 or 2">
+    <button onclick="mapUser()">Map User (Login)</button>
+    <div class="log-explain">Enter your user ID (the number you registered with). Open a separate browser tab for each user.</div>
+  </div>
+
+  <div class="section">
+    <label><b>Room ID:</b></label>
+    <input type="number" id="roomId" min="1" placeholder="e.g. 1">
+    <label><b>Other User IDs (comma separated):</b></label>
+    <input type="text" id="selectedUsers" placeholder="e.g. 2 or 2,3">
+    <button onclick="createRoom()">Create Room</button>
+    <button onclick="joinRoom()">Join Room</button>
+    <button onclick="leaveRoom()">Leave Room</button>
+    <button onclick="endRoom()">End Room</button>
+    <div class="log-explain">
+      <b>Create Room:</b> Enter your User ID and the IDs of other users you want to invite, then click "Create Room".<br>
+      <b>Join Room:</b> Enter the Room ID and your User ID, then click "Join Room".<br>
+      <b>Leave/End Room:</b> Enter the Room ID and your User ID, then click the button.
+    </div>
+  </div>
+
+  <div class="section">
+    <label><b>Message:</b></label>
+    <input type="text" id="msgText" placeholder="Type your message here">
+    <input type="text" id="msgName" placeholder="Your Name (optional)">
+    <input type="checkbox" id="isSaveInDb" checked> <label for="isSaveInDb">Save message in database?</label>
+    <button onclick="sendMessage()">Send Message</button>
+    <div class="log-explain">Enter Room ID, User ID, and your message. Click "Send Message" to chat.</div>
+  </div>
+
+  <div class="section">
+    <button onclick="logoutUser()">Logout</button>
+    <div class="log-explain">Click to disconnect your user from the chat (logout).</div>
+  </div>
+
+  <h4>Log / Responses:
+    <button class="log-clear-btn" onclick="clearLog()">Clear Log</button>
+  </h4>
+  <div id="log"></div>
+
+  <script>
+    let socket = null;
+    function log(msg, type = 'recv', explain = '') {
+      const logDiv = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      let css = 'log-recv';
+      if (type === 'sent') css = 'log-sent';
+      if (type === 'error') css = 'log-error';
+      let html = `<div class='${css}'>`;
+      if (type === 'sent') html += '<b>Sent:</b> ';
+      if (type === 'recv') html += '<b>Received:</b> ';
+      if (type === 'error') html += '<b>Error:</b> ';
+      html += msg;
+      html += `<span class='log-time'>${time}</span>`;
+      if (explain) html += `<div class='log-explain'>${explain}</div>`;
+      html += '</div>';
+      logDiv.innerHTML += html;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+    function clearLog() {
+      document.getElementById('log').innerHTML = '';
+    }
+    function connectSocket() {
+      const url = document.getElementById('backendUrl').value;
+      if (socket) socket.disconnect();
+      socket = io(url);
+      socket.on('connect', () => {
+        document.getElementById('connStatus').innerText = 'Connected (' + socket.id + ')';
+        log('Socket connected: ' + socket.id, 'recv', 'Socket server se connection ho gaya.');
+      });
+      socket.on('disconnect', () => {
+        document.getElementById('connStatus').innerText = 'Disconnected';
+        log('Socket disconnected', 'error', 'Connection band ho gaya.');
+      });
+      // Listen for all relevant events
+      socket.onAny((event, data) => {
+        let explain = '';
+        if(event === 'mapUserSuccess') explain = 'User mapping (login) successful.';
+        if(event === 'mapUserError') explain = 'User mapping mein error.';
+        if(event === 'userJoined') explain = 'Kisi user ne room join kiya.';
+        if(event === 'roomCreationError') explain = 'Room create karne mein error.';
+        if(event === 'roomInvitations') explain = 'Aapko kisi ne room mein bulaya hai.';
+        if(event === 'roomMessageDeliver') explain = 'Room mein naya message aya.';
+        if(event === 'errorInRoomMessage') explain = 'Message bhejne mein error.';
+        if(event === 'leaveRoomSuccess') explain = 'Room se successfully nikal gaye.';
+        if(event === 'leaveRoomError') explain = 'Room se nikalne mein error.';
+        if(event === 'endRoomSuccess') explain = 'Room (call) end ho gaya.';
+        if(event === 'endRoomError') explain = 'Room end karne mein error.';
+        if(event === 'mapUserDeleteSuccess') explain = 'Logout successful.';
+        if(event === 'mapUserDeleteError') explain = 'Logout mein error.';
+        log(`<b>${event}</b><br><pre style='white-space:pre-wrap;'>${JSON.stringify(data, null, 2)}</pre>`, event.toLowerCase().includes('error') ? 'error' : 'recv', explain);
+      });
+    }
+    function mapUser() {
+      const userId = parseInt(document.getElementById('userId').value);
+      if (!userId) return alert('Enter User ID');
+      socket.emit('mapUser', userId);
+      log('mapUser ' + userId, 'sent', 'User ko socket server se map (login) kar rahe hain.');
+    }
+    function createRoom() {
+      const userId = parseInt(document.getElementById('userId').value);
+      const selected = document.getElementById('selectedUsers').value;
+      if (!userId || !selected) return alert('User ID & Selected Users required');
+      const selectedUsers = selected.split(',').map(s => parseInt(s.trim())).filter(Boolean);
+      socket.emit('createRoom', { userId, selectedUsers });
+      log('createRoom ' + JSON.stringify({ userId, selectedUsers }), 'sent', 'Room create kar rahe hain.');
+    }
+    async function fetchAndRenderMessages(roomId) {
+      const backendUrl = document.getElementById('backendUrl').value;
+      try {
+        const res = await fetch(backendUrl + '/api/messages/' + roomId);
+        const data = await res.json();
+        if (data.status === 'success' && Array.isArray(data.data)) {
+          data.data.forEach(msg => {
+            log(
+              `<b>Room Message</b><br><pre style='white-space:pre-wrap;'>${JSON.stringify(msg, null, 2)}</pre>`,
+              'recv',
+              'Previous message'
+            );
+          });
+        } else {
+          log('No previous messages.', 'recv');
+        }
+      } catch (e) {
+        log('Failed to load previous messages', 'error');
+      }
+    }
+
+    function joinRoom() {
+      const roomId = parseInt(document.getElementById('roomId').value);
+      const joinUser = parseInt(document.getElementById('userId').value);
+      if (!roomId || !joinUser) return alert('Room ID & User ID required');
+      socket.emit('joinRoom', { roomId, joinUser });
+      log('joinRoom ' + JSON.stringify({ roomId, joinUser }), 'sent', 'Room join karne ki koshish.');
+      fetchAndRenderMessages(roomId);
+    }
+    function leaveRoom() {
+      const roomId = parseInt(document.getElementById('roomId').value);
+      const userId = parseInt(document.getElementById('userId').value);
+      if (!roomId || !userId) return alert('Room ID & User ID required');
+      socket.emit('leaveRoom', { roomId, userId });
+      log('leaveRoom ' + JSON.stringify({ roomId, userId }), 'sent', 'Room chhor rahe hain.');
+    }
+    function endRoom() {
+      const roomId = parseInt(document.getElementById('roomId').value);
+      if (!roomId) return alert('Room ID required');
+      socket.emit('endRoom', { roomId });
+      log('endRoom ' + JSON.stringify({ roomId }), 'sent', 'Room (call) end kar rahe hain.');
+    }
+    function sendMessage() {
+      const userId = parseInt(document.getElementById('userId').value);
+      const roomId = parseInt(document.getElementById('roomId').value);
+      const message = document.getElementById('msgText').value;
+      const name = document.getElementById('msgName').value || 'User';
+      const isSaveInDb = document.getElementById('isSaveInDb').checked;
+      if (!userId || !roomId || !message) return alert('User ID, Room ID & Message required');
+      socket.emit('roomMessage', { userId, roomId, message, name, isSaveInDb });
+      log('roomMessage ' + JSON.stringify({ userId, roomId, message, name, isSaveInDb }), 'sent', 'Room mein message bhej rahe hain.');
+    }
+    function logoutUser() {
+      const userId = parseInt(document.getElementById('userId').value);
+      if (!userId) return alert('User ID required');
+      socket.emit('logout', userId);
+      log('logout ' + userId, 'sent', 'User ko logout kar rahe hain.');
+    }
+    // Auto-connect on page load
+    window.onload = connectSocket;
+  </script>
+</body>
+</html>
