@@ -15,10 +15,11 @@
     "dialect": "mysql"
   },
   "production": {
-    "username": "root",
-    "password": null,
-    "database": "database_production",
-    "host": "127.0.0.1",
+    "username": "Chat-App-353131356228",
+    "password": "Khanjee@007",
+    "database": "Chat-App-353131356228",
+    "host": "mysql.gb.stackcp.com",
+    "port": 41318,
     "dialect": "mysql"
   }
 }
