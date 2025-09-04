@@ -7,6 +7,10 @@ const process = require("process");
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || "development";
 const config = require(__dirname + "/../config/config.json")[env];
+// Visible diagnostics for which DB config is active
+console.log(
+  `[Sequelize] Using environment: ${env} | host: ${config.host} | db: ${config.database}`
+);
 const db = {};
 
 let sequelize;

@@ -7,9 +7,16 @@ const app = express();
 const { Server } = require("socket.io");
 
 const routing = require("./src/route");
-dotenv.config();
+// Ensure we always load the .env that sits next to this file (works under PM2 too)
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
-const port = process.env.PORT;
+// Fallback to 3000 if PORT isn't provided via env/PM2
+const defaultPort = 3000;
+const port = Number(process.env.PORT) || defaultPort;
+
+// Visible startup diagnostics
+console.log("NODE_ENV:", process.env.NODE_ENV || "development");
+console.log("Effective PORT:", port);
 
 app.use(
   cors({
@@ -26,7 +33,7 @@ app.use(express.static(path.join(__dirname)));
 routing(app);
 
 let server = app.listen(port, '0.0.0.0', () => {
-  console.log("Server Running on PORT", port);
+  console.log(`Server Running on PORT ${port} (effective port)`);
 });
 
 const io = new Server(server, {
